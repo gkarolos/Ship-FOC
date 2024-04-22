@@ -1,0 +1,76 @@
+# Importing necessary libraries
+import pandas as pd
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error, explained_variance_score
+import numpy as np
+import matplotlib.pyplot as plt
+
+from google.colab import files
+
+# Upload the data file
+uploaded = files.upload()
+
+# Load the dataset
+data = pd.read_excel(list(uploaded.keys())[0])
+
+# Load input data
+input_data = pd.read_excel('raw_data.xlsx')
+target_data = pd.read_excel('fuel_consumption.xlsx')
+
+# Aggregate minute-level input data to daily-level
+input_data_daily = input_data.resample('D', on='date').mean()
+
+# Merge input data with target data based on date
+merged_data = pd.merge(input_data_daily, target_data, on='date')
+
+# Assuming you have additional columns for each engine's data in input_data
+# You can include them in the features X
+X = merged_data[['wind_speed', 'ship_speed', 'me1_rpm', 'me2_rpm', 'me3_rpm', 'me4_rpm', 'me1_power', 'me2_power', 'me3_power', 'me4_power']]
+y = merged_data['fuel_consumption']
+
+# Split the data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Initialize the Random Forest Regression model
+model = RandomForestRegressor(n_estimators=1300, random_state=42)
+
+# Perform 5-fold cross-validation and calculate metrics
+cv_scores_r2 = cross_val_score(model, X, y, cv=5, scoring='r2')
+cv_scores_mse = cross_val_score(model, X, y, cv=5, scoring='neg_mean_squared_error')
+cv_scores_mae = cross_val_score(model, X, y, cv=5, scoring='neg_mean_absolute_error')
+cv_scores_ev = cross_val_score(model, X, y, cv=5, scoring='explained_variance')
+
+# Print the cross-validated metrics
+print("Cross-validated R-squared:", np.mean(cv_scores_r2))
+print("Cross-validated Mean Squared Error:", -np.mean(cv_scores_mse))
+print("Cross-validated Mean Absolute Error:", -np.mean(cv_scores_mae))
+print("Cross-validated Explained Variance Score:", np.mean(cv_scores_ev))
+
+# Train the model
+model.fit(X_train, y_train)
+
+# Predict on the test set
+y_pred = model.predict(X_test)
+
+# Calculate metrics on the test set
+test_r2 = r2_score(y_test, y_pred)
+test_mse = mean_squared_error(y_test, y_pred)
+test_mae = mean_absolute_error(y_test, y_pred)
+test_ev = explained_variance_score(y_test, y_pred)
+
+# Print the metrics on the test set
+print("R-squared on test set:", test_r2)
+print("Mean Squared Error on test set:", test_mse)
+print("Mean Absolute Error on test set:", test_mae)
+print("Explained Variance Score on test set:", test_ev)
+
+# Plotting actual vs. predicted values
+plt.figure(figsize=(10, 6))
+plt.scatter(y_test, y_pred, color='blue', label='Actual vs. Predicted')
+plt.plot([y.min(), y.max()], [y.min(), y.max()], '--k', color='red', label='Perfect prediction')
+plt.title('Actual vs. Predicted Fuel Consumption (Random Forest Regressor)')
+plt.xlabel('Actual Fuel Consumption')
+plt.ylabel('Predicted Fuel Consumption')
+plt.legend()
+plt.show()
