@@ -38,11 +38,11 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_
 # Initialize the Linear Regression model
 model = LinearRegression()
 
-# Perform 5-fold cross-validation and calculate metrics
-cv_scores_r2 = cross_val_score(model, X, y, cv=5, scoring='r2')
-cv_scores_mse = cross_val_score(model, X, y, cv=5, scoring='neg_mean_squared_error')
-cv_scores_mae = cross_val_score(model, X, y, cv=5, scoring='neg_mean_absolute_error')
-cv_scores_ev = cross_val_score(model, X, y, cv=5, scoring='explained_variance')
+# Perform 10-fold cross-validation and calculate metrics
+cv_scores_r2 = cross_val_score(model, X, y, cv=10, scoring='r2')
+cv_scores_mse = cross_val_score(model, X, y, cv=10, scoring='neg_mean_squared_error')
+cv_scores_mae = cross_val_score(model, X, y, cv=10, scoring='neg_mean_absolute_error')
+cv_scores_ev = cross_val_score(model, X, y, cv=10, scoring='explained_variance')
 
 # Print the cross-validated metrics
 print("Cross-validated R-squared:", np.mean(cv_scores_r2))
