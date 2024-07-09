@@ -7,6 +7,9 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, explained_v
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.optimizers import Adam
+!pip install scikeras # Installing the missing scikeras library
+from scikeras.wrappers import KerasRegressor # Now you can import KerasRegressor
+
 from google.colab import files
 
 # Upload the data file
@@ -27,8 +30,8 @@ merged_data = pd.merge(input_data_daily, target_data, on='date')
 
 # Assuming you have additional columns for each engine's data in input_data
 # You can include them in the features X
-X = merged_data[['wind_speed', 'ship_speed', 'me1_rpm', 'me2_rpm', 'me3_rpm', 'me4_rpm', 'me1_power', 'me2_power', 'me3_power', 'me4_power']]
-y = merged_data['fuel_consumption']
+X = merged_data[['wind_speed', 'ship_speed', 'me1_rpm', 'me2_rpm', 'me3_rpm', 'me4_rpm', 'me1_power', 'me2_power', 'me3_power', 'me4_power']].values
+y = merged_data['fuel_consumption'].values
 
 # Split the data into training and testing sets
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -42,6 +45,22 @@ def create_model():
     optimizer = Adam(learning_rate=0.001)  # Use Adam optimizer
     model.compile(loss='mean_squared_error', optimizer=optimizer)
     return model
+
+# Wrap the Keras model with KerasRegressor
+model = KerasRegressor(build_fn=create_model, epochs=2000, batch_size=5, verbose=0)
+
+# Perform 10-fold cross-validation and calculate metrics
+cv = KFold(n_splits=10, shuffle=True, random_state=42)
+cv_scores_r2 = cross_val_score(model, X, y, cv=cv, scoring='r2')
+cv_scores_mse = cross_val_score(model, X, y, cv=cv, scoring='neg_mean_squared_error')
+cv_scores_mae = cross_val_score(model, X, y, cv=cv, scoring='neg_mean_absolute_error')
+cv_scores_ev = cross_val_score(model, X, y, cv=cv, scoring='explained_variance')
+
+# Print the cross-validated metrics
+print("Cross-validated R-squared:", np.mean(cv_scores_r2))
+print("Cross-validated Mean Squared Error:", -np.mean(cv_scores_mse))
+print("Cross-validated Mean Absolute Error:", -np.mean(cv_scores_mae))
+print("Cross-validated Explained Variance Score:", np.mean(cv_scores_ev))
 
 # Train the final model
 final_model = create_model()
@@ -63,6 +82,7 @@ print('Explained Variance Score:', evs)
 print('R^2 Score:', r2)
 
 # Plotting actual vs. predicted values
+plt.figure(figsize=(10, 6))
 plt.scatter(y_test, y_pred, color='blue', label='Actual vs. Predicted')
 plt.plot([y.min(), y.max()], [y.min(), y.max()], '--k', color='red', label='Perfect prediction')
 plt.title('Actual vs. Predicted Fuel Consumption (ANN)')
