@@ -32,15 +32,15 @@ X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=0.20
 # Initialize the Random Forest Regression model
 model = RandomForestRegressor(n_estimators=1300, random_state=42)
 
-# Perform 10-fold cross-validation on training+validation set and calculate metrics
-cv_scores_r2 = cross_val_score(model, X_train_val, y_train_val, cv=10, scoring='r2')
-cv_scores_mse = cross_val_score(model, X_train_val, y_train_val, cv=10, scoring='neg_mean_squared_error')
-cv_scores_mae = cross_val_score(model, X_train_val, y_train_val, cv=10, scoring='neg_mean_absolute_error')
-cv_scores_ev = cross_val_score(model, X_train_val, y_train_val, cv=10, scoring='explained_variance')
+# Perform 5-fold cross-validation on training+validation set and calculate metrics
+cv_scores_r2 = cross_val_score(model, X_train_val, y_train_val, cv=5, scoring='r2')
+cv_scores_mse = cross_val_score(model, X_train_val, y_train_val, cv=5, scoring='neg_mean_squared_error')
+cv_scores_mae = cross_val_score(model, X_train_val, y_train_val, cv=5, scoring='neg_mean_absolute_error')
+cv_scores_ev = cross_val_score(model, X_train_val, y_train_val, cv=5, scoring='explained_variance')
 
 # Print the metrics for each fold
 print("Cross-validation results per fold:")
-for i in range(10):
+for i in range(5):
     print(f"Fold {i+1}:")
     print(f"  R-squared: {cv_scores_r2[i]}")
     print(f"  Mean Squared Error: {-cv_scores_mse[i]}")  # Negate MSE and MAE to show positive values
