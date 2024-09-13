@@ -79,7 +79,7 @@ print(f"Cross-validated Explained Variance Score: {np.mean(cv_scores_ev)}")
 best_model.fit(X_train_val, y_train_val)
 
 # Predict on the test set
-y_pred = model.predict(X_test)
+y_pred = best_model.predict(X_test)
 
 # Calculate metrics on the test set
 test_r2 = r2_score(y_test, y_pred)
