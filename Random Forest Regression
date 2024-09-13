@@ -1,9 +1,9 @@
 # Importing necessary libraries
+import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error, explained_variance_score
-import numpy as np
 import matplotlib.pyplot as plt
 
 from google.colab import files
@@ -12,8 +12,8 @@ from google.colab import files
 uploaded = files.upload()
 
 # Load input data
-input_data = pd.read_excel('raw_data.xlsx')
-target_data = pd.read_excel('fuel_consumption.xlsx')
+input_data = pd.read_excel('raw_data_scaled.xlsx')
+target_data = pd.read_excel('fuel_consumption_scaled.xlsx')
 
 # Aggregate minute-level input data to daily-level
 input_data_daily = input_data.resample('D', on='date').mean()
@@ -29,14 +29,35 @@ y = merged_data['fuel_consumption']
 # Split the data into training+validation and test sets (80-20 split)
 X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=0.20, random_state=42)
 
-# Initialize the Random Forest Regression model
-model = RandomForestRegressor(n_estimators=1300, random_state=42)
+# Initialize the Random Forest Regressor
+model = RandomForestRegressor(random_state=42)
+
+# Define hyperparameters for tuning
+param_grid = {
+    'n_estimators': [500, 1000, 1300],
+    'max_depth': [10, 20, None],
+    'min_samples_split': [2, 5, 10],
+    'min_samples_leaf': [1, 2, 4],
+    'max_features': ['auto', 'sqrt', 'log2']
+}
+
+# Use GridSearchCV for hyperparameter tuning and cross-validation
+grid_search = GridSearchCV(estimator=model, param_grid=param_grid, cv=5, scoring='r2', n_jobs=-1, verbose=2)
+
+# Perform the grid search on the training+validation set
+grid_search.fit(X_train_val, y_train_val)
+
+# Retrieve the best model from grid search
+best_model = grid_search.best_estimator_
+
+# Print the best parameters found by GridSearchCV
+print("Best hyperparameters:", grid_search.best_params_)
 
 # Perform 5-fold cross-validation on training+validation set and calculate metrics
-cv_scores_r2 = cross_val_score(model, X_train_val, y_train_val, cv=5, scoring='r2')
-cv_scores_mse = cross_val_score(model, X_train_val, y_train_val, cv=5, scoring='neg_mean_squared_error')
-cv_scores_mae = cross_val_score(model, X_train_val, y_train_val, cv=5, scoring='neg_mean_absolute_error')
-cv_scores_ev = cross_val_score(model, X_train_val, y_train_val, cv=5, scoring='explained_variance')
+cv_scores_r2 = cross_val_score(best_model, X_train_val, y_train_val, cv=5, scoring='r2')
+cv_scores_mse = cross_val_score(best_model, X_train_val, y_train_val, cv=5, scoring='neg_mean_squared_error')
+cv_scores_mae = cross_val_score(best_model, X_train_val, y_train_val, cv=5, scoring='neg_mean_absolute_error')
+cv_scores_ev = cross_val_score(best_model, X_train_val, y_train_val, cv=5, scoring='explained_variance')
 
 # Print the metrics for each fold
 print("Cross-validation results per fold:")
@@ -55,7 +76,7 @@ print(f"Cross-validated Mean Absolute Error: {-np.mean(cv_scores_mae)}")
 print(f"Cross-validated Explained Variance Score: {np.mean(cv_scores_ev)}")
 
 # Train the model
-model.fit(X_train, y_train)
+best_model.fit(X_train_val, y_train_val)
 
 # Predict on the test set
 y_pred = model.predict(X_test)
