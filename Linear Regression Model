@@ -145,7 +145,7 @@ for train_index, test_index in skf.split(X_scaled, y_binned):
 # Compute the average learning curves
 avg_learning_curves = {key: np.mean(np.vstack(learning_curves[key]), axis=0) for key in learning_curves}
 
-# Plot the learning curves for MSLE and MedianAE
+# Plot the learning curves
 plt.figure(figsize=(12, 8))
 for metric in ['rmse', 'mae', 'r2', 'ev', 'msle', 'medianae']:
     plt.plot(range(1, epochs + 1), avg_learning_curves[metric], label=f'Test {metric.upper()}')
