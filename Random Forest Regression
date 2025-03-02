@@ -1,104 +1,115 @@
 # Importing necessary libraries
+!pip install scikit-learn
+from IPython import get_ipython
+from IPython.display import display
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error, explained_variance_score
 import matplotlib.pyplot as plt
-
+import seaborn as sns
+from sklearn.model_selection import StratifiedKFold
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import (
+    r2_score, mean_squared_error, mean_absolute_error,
+    explained_variance_score, mean_squared_log_error, median_absolute_error
+)
+from sklearn.preprocessing import StandardScaler
 from google.colab import files
 
 # Upload the data file
 uploaded = files.upload()
 
 # Load input data
-input_data = pd.read_excel('raw_data_scaled.xlsx')
-target_data = pd.read_excel('fuel_consumption_scaled.xlsx')
-
-# Aggregate minute-level input data to daily-level
-input_data_daily = input_data.resample('D', on='date').mean()
+input_data = pd.read_excel('mean_duration_miles.xlsx')
+target_data = pd.read_excel('fuel_consumption.xlsx')
 
 # Merge input data with target data based on date
-merged_data = pd.merge(input_data_daily, target_data, on='date')
+merged_data = pd.merge(input_data, target_data, on='date')
 
-# Assuming you have additional columns for each engine's data in input_data
-# You can include them in the features X
-X = merged_data[['wind_speed', 'ship_speed', 'me1_rpm', 'me2_rpm', 'me3_rpm', 'me4_rpm', 'me1_power', 'me2_power', 'me3_power', 'me4_power']]
+# Features and target
+X = merged_data[['ship_speed', 'me1_rpm', 'me2_rpm', 'me3_rpm', 'me4_rpm', 'me1_hr', 'me2_hr', 'me3_hr', 'me4_hr', 'miles']]
 y = merged_data['fuel_consumption']
 
-# Split the data into training+validation and test sets (80-20 split)
-X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=0.20, random_state=42)
+# Discretize the target variable for Stratified K-Fold
+y_binned = pd.cut(y, bins=5, labels=False)
 
-# Initialize the Random Forest Regressor
-model = RandomForestRegressor(random_state=42)
+# Scale both features and target
+scaler_X = StandardScaler()
+scaler_y = StandardScaler()
+X_scaled = scaler_X.fit_transform(X)
+y_scaled = scaler_y.fit_transform(y.values.reshape(-1, 1)).flatten()
 
-# Define hyperparameters for tuning
-param_grid = {
-    'n_estimators': [500, 1000, 1300],
-    'max_depth': [10, 20, None],
-    'min_samples_split': [2, 5, 10],
-    'min_samples_leaf': [1, 2, 4],
-    'max_features': ['auto', 'sqrt', 'log2']
-}
+# Set up 5-fold cross-validation using StratifiedKFold
+skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
-# Use GridSearchCV for hyperparameter tuning and cross-validation
-grid_search = GridSearchCV(estimator=model, param_grid=param_grid, cv=5, scoring='r2', n_jobs=-1, verbose=2)
+# Model parameters
+rfr_params = {'n_estimators': 50, 'random_state': 42, 'warm_start': True}
+epochs = 50
 
-# Perform the grid search on the training+validation set
-grid_search.fit(X_train_val, y_train_val)
+# Store metrics and learning curves
+metrics = ['rmse', 'mae', 'r2', 'ev', 'msle', 'medianae']
+learning_curves = {m: [] for m in metrics}
+learning_curves.update({m + '_train': [] for m in metrics})
+avg_metrics = {m: [] for m in metrics}  # Store final metrics for each fold
 
-# Retrieve the best model from grid search
-best_model = grid_search.best_estimator_
+# Perform stratified cross-validation manually to track train/test indices
+fold = 1
+for train_index, test_index in skf.split(X_scaled, y_binned):
+    print(f"\nFold {fold}")
+    X_train, X_val = X_scaled[train_index], X_scaled[test_index]
+    y_train, y_val = y_scaled[train_index], y_scaled[test_index]
 
-# Print the best parameters found by GridSearchCV
-print("Best hyperparameters:", grid_search.best_params_)
+    model = RandomForestRegressor(**rfr_params)
 
-# Perform 5-fold cross-validation on training+validation set and calculate metrics
-cv_scores_r2 = cross_val_score(best_model, X_train_val, y_train_val, cv=5, scoring='r2')
-cv_scores_mse = cross_val_score(best_model, X_train_val, y_train_val, cv=5, scoring='neg_mean_squared_error')
-cv_scores_mae = cross_val_score(best_model, X_train_val, y_train_val, cv=5, scoring='neg_mean_absolute_error')
-cv_scores_ev = cross_val_score(best_model, X_train_val, y_train_val, cv=5, scoring='explained_variance')
+    fold_learning = {m: [] for m in learning_curves}
 
-# Print the metrics for each fold
-print("Cross-validation results per fold:")
-for i in range(5):
-    print(f"Fold {i+1}:")
-    print(f"  R-squared: {cv_scores_r2[i]}")
-    print(f"  Mean Squared Error: {-cv_scores_mse[i]}")  # Negate MSE and MAE to show positive values
-    print(f"  Mean Absolute Error: {-cv_scores_mae[i]}")
-    print(f"  Explained Variance: {cv_scores_ev[i]}")
+    for epoch in range(epochs):
+        model.n_estimators = epoch + 1
+        model.fit(X_train, y_train)
 
-# Print the average cross-validated metrics
-print("\nAverage cross-validated metrics:")
-print(f"Cross-validated R-squared: {np.mean(cv_scores_r2)}")
-print(f"Cross-validated Mean Squared Error: {-np.mean(cv_scores_mse)}")
-print(f"Cross-validated Mean Absolute Error: {-np.mean(cv_scores_mae)}")
-print(f"Cross-validated Explained Variance Score: {np.mean(cv_scores_ev)}")
+        # Predictions (scaled and descaled)
+        y_train_pred, y_val_pred = model.predict(X_train), model.predict(X_val)
+        y_train_pred_unscaled = scaler_y.inverse_transform(y_train_pred.reshape(-1, 1))
+        y_val_pred_unscaled = scaler_y.inverse_transform(y_val_pred.reshape(-1, 1))
+        y_train_unscaled = scaler_y.inverse_transform(y_train.reshape(-1, 1))
+        y_val_unscaled = scaler_y.inverse_transform(y_val.reshape(-1, 1))
 
-# Train the model
-best_model.fit(X_train_val, y_train_val)
+        # Clip negative predictions for MSLE
+        y_train_pred_unscaled = np.clip(y_train_pred_unscaled, a_min=0, a_max=None)
+        y_val_pred_unscaled = np.clip(y_val_pred_unscaled, a_min=0, a_max=None)
 
-# Predict on the test set
-y_pred = best_model.predict(X_test)
+        # Compute metrics
+        for metric, func in zip(metrics, [mean_squared_error, mean_absolute_error, r2_score,
+                                           explained_variance_score, mean_squared_log_error, median_absolute_error]):
+            fold_learning[metric + '_train'].append(np.sqrt(func(y_train_unscaled, y_train_pred_unscaled))
+                                                    if metric in ['rmse', 'msle'] else func(y_train_unscaled, y_train_pred_unscaled))
+            fold_learning[metric].append(np.sqrt(func(y_val_unscaled, y_val_pred_unscaled))
+                                         if metric in ['rmse', 'msle'] else func(y_val_unscaled, y_val_pred_unscaled))
 
-# Calculate metrics on the test set
-test_r2 = r2_score(y_test, y_pred)
-test_mse = mean_squared_error(y_test, y_pred)
-test_mae = mean_absolute_error(y_test, y_pred)
-test_ev = explained_variance_score(y_test, y_pred)
+    for key in learning_curves:
+        learning_curves[key].append(fold_learning[key])
 
-# Print the metrics on the test set
-print("R-squared on test set:", test_r2)
-print("Mean Squared Error on test set:", test_mse)
-print("Mean Absolute Error on test set:", test_mae)
-print("Explained Variance Score on test set:", test_ev)
+    # Store final metrics for this fold
+    for metric in metrics:
+        avg_metrics[metric].append(fold_learning[metric][-1])
 
-# Plotting actual vs. predicted values
-plt.figure(figsize=(10, 6))
-plt.scatter(y_test, y_pred, color='blue', label='Actual vs. Predicted')
-plt.plot([y.min(), y.max()], [y.min(), y.max()], '--k', color='red', label='Perfect prediction')
-plt.title('Actual vs. Predicted Fuel Consumption (Random Forest Regressor)')
-plt.xlabel('Actual Fuel Consumption')
-plt.ylabel('Predicted Fuel Consumption')
-plt.legend()
-plt.show()
+    fold += 1
+
+# Compute average learning curves
+avg_learning_curves = {key: np.mean(np.vstack(learning_curves[key]), axis=0) for key in learning_curves}
+
+# Plot learning curves
+plt.figure(figsize=(12, 8))
+for metric in metrics:
+    plt.plot(range(1, epochs + 1), avg_learning_curves[metric], label=f'Test {metric.upper()}')
+    plt.plot(range(1, epochs + 1), avg_learning_curves[f'{metric}_train'], linestyle='dashed', label=f'Train {metric.upper()}')
+    plt.xlabel("Epochs")
+    plt.ylabel(metric.upper())
+    plt.title(f"Learning Curve for {metric.upper()}")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+# Print average metrics across folds
+print("\nUnscaled Average Metrics Across All Folds:")
+for metric in metrics:
+    print(f"Average {metric.upper()}: {np.mean(avg_metrics[metric])}")
